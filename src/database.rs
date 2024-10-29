@@ -1,8 +1,10 @@
 use std::{
     fs::{File, OpenOptions},
-    io::{BufRead, BufReader, Seek, SeekFrom, Write},
+    io::{self, BufRead, BufReader, Seek, SeekFrom, Write},
     path::Path,
 };
+
+use crate::utils::{check_db_file, get_db_path};
 
 #[derive(Debug)]
 pub struct Todo {
@@ -10,23 +12,26 @@ pub struct Todo {
     pub content: String,
 }
 
-pub struct Command {
+pub struct Database {
     pub file: File,
 }
 
-impl Command {
-    pub fn open(path: &str) -> Command {
+impl Database {
+    pub fn open() -> Database {
+        let _ = check_db_file();
+        let path = get_db_path();
+
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(Path::new(path))
+            .open(path)
             .unwrap();
-        Command { file }
+        Database { file }
     }
-    pub fn add(&mut self, todo: Todo) {
+    pub fn add(&mut self, todo: Todo) -> Result<(), io::Error> {
         let content = format!("{} {}", todo.id, todo.content);
-        writeln!(self.file, "{}", content).unwrap();
+        writeln!(self.file, "{}", content)
     }
 
     pub fn list(&self) -> Vec<Todo> {
@@ -43,22 +48,22 @@ impl Command {
             .collect()
     }
 
-    pub fn remove(&mut self, id: u64) -> Option<()> {
+    pub fn remove(&mut self, id: u64) -> Result<(), io::Error> {
         let todos = self.list();
         let target = todos.iter().find(|todo| todo.id == id);
 
-        println!("{:?}", target);
-
-        if target.is_none() {
-            return None;
-        }
-        self.file.seek(SeekFrom::Start(0)).expect("dd");
-        self.file.set_len(0).expect("sssddddd");
-        for todo in todos {
-            if todo.id != id {
-                self.add(todo);
+        match target {
+            None => Err(io::Error::new(io::ErrorKind::NotFound, "Todo not found")),
+            Some(_) => {
+                self.file.seek(SeekFrom::Start(0)).expect("");
+                self.file.set_len(0).expect("");
+                for todo in todos {
+                    if todo.id != id {
+                        let _ = self.add(todo);
+                    }
+                }
+                Ok(())
             }
         }
-        Some(())
     }
 }
